@@ -339,12 +339,27 @@ where
     K: Eq + Hash,
     S: BuildHasher,
 {
-    fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
+    fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         let iter = iter.into_iter();
         self.reserve(iter.size_hint().0);
         iter.for_each(move |(k, v)| {
             self.insert(k, v);
         });
+    }
+}
+
+impl<K, V, S> MashMap<K, V, S>
+where
+    K: Eq + Hash + Copy,
+    S: BuildHasher,
+{
+    pub fn insert_iter<I: Iterator<Item = V>>(&mut self, key: K, value_iter: I) {
+        let hash = make_hash(&self.hash_builder, &key);
+        self.reserve(value_iter.size_hint().0);
+        value_iter.for_each(|value| {
+            self.table
+                .insert(hash, (key, value), make_hasher(&self.hash_builder));
+        })
     }
 }
 
