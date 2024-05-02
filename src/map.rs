@@ -18,6 +18,7 @@ where
     move |x| k == x.0.borrow()
 }
 
+/// Compute the hash of a value using the given hash builder.
 #[inline]
 fn make_hash<T, S>(hash_builder: &S, value: &T) -> u64
 where
@@ -27,6 +28,7 @@ where
     hash_builder.hash_one(value)
 }
 
+/// Returns a hasher using the given hash builder.
 #[inline]
 fn make_hasher<K, V, S>(hash_builder: &S) -> impl Fn(&(K, V)) -> u64 + '_
 where
@@ -156,11 +158,13 @@ impl<K, V, S> MashMap<K, V, S> {
         }
     }
 
+    /// An iterator visiting all key-value pairs in arbitrary order.
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = &(K, V)> {
         unsafe { self.table.iter().map(|bucket| bucket.as_ref()) }
     }
 
+    /// An iterator visiting all key-value pairs in arbitrary order, with mutable references to the values.
     #[inline]
     pub fn iter_mut(&self) -> impl Iterator<Item = &mut (K, V)> {
         unsafe { self.table.iter().map(|bucket| bucket.as_mut()) }
@@ -207,6 +211,7 @@ where
             .insert(hash, (key, value), make_hasher(&self.hash_builder));
     }
 
+    /// An iterator visiting all buckets with the given key.
     #[inline]
     fn get_iter_buckets<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = Bucket<(K, V)>> + 'a
     where
@@ -221,6 +226,7 @@ where
         }
     }
 
+    /// An iterator visiting all values with the given key.
     #[inline]
     pub fn get_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &V> + 'a
     where
@@ -231,6 +237,7 @@ where
             .map(|bucket| unsafe { &bucket.as_ref().1 })
     }
 
+    /// An iterator visiting all values with the given key, with mutable references to the values.
     #[inline]
     pub fn get_mut_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &mut V> + 'a
     where
@@ -252,6 +259,7 @@ where
         self.table.find(hash, equivalent_key(key)).is_some()
     }
 
+    /// Returns a reference to an arbitrary value corresponding to the key.
     #[inline]
     pub fn get_one<Q>(&self, key: &Q) -> Option<&V>
     where
@@ -264,6 +272,7 @@ where
             .map(|bucket| unsafe { bucket.as_ref().1.borrow() })
     }
 
+    /// Returns a mutable reference to an arbitrary value corresponding to the key.
     #[inline]
     pub fn get_one_mut<Q>(&self, key: &Q) -> Option<&mut V>
     where
@@ -303,6 +312,7 @@ where
             .map(|(_, value)| value)
     }
 
+    /// Removes all values with the given key from the map.
     pub fn remove_all<Q>(&mut self, key: &Q)
     where
         K: Borrow<Q>,
@@ -319,6 +329,7 @@ where
         }
     }
 
+    /// Clears the entries with the given key, returning corresponding key-value pairs as an iterator.
     pub fn drain_key<'a, Q>(&'a mut self, key: &'a Q) -> impl Iterator<Item = V> + 'a
     where
         K: Borrow<Q>,
@@ -353,6 +364,7 @@ where
     K: Eq + Hash + Copy,
     S: BuildHasher,
 {
+    /// Inserts multiple entries for the given key, with values taken from an iterator.
     pub fn insert_iter<I: Iterator<Item = V>>(&mut self, key: K, value_iter: I) {
         let hash = make_hash(&self.hash_builder, &key);
         self.reserve(value_iter.size_hint().0);
@@ -376,13 +388,12 @@ mod tests {
         map.insert(2, 20);
         map.insert(2, 21);
 
-        // iterate over mutable values associated with key `1`
-        // and increment them
+        // iterate over the values with key `1` with mutable references and increment them
         for v in map.get_mut_iter(&1) {
             *v += 1;
         }
 
-        // collect the values associated with keys `1` and `2`
+        // collect the values with keys `1` and `2`
         // note that the order may differ from the insertion order
         let mut values_1: Vec<_> = map.get_iter(&1).copied().collect();
         let mut values_2: Vec<_> = map.get_iter(&2).copied().collect();
