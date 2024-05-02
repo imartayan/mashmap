@@ -2,7 +2,7 @@
 
 A flat HashMap that supports multiple entries per key.
 
-This is an adaptation of Rust's standard `HashMap` (using [hashbrown](https://github.com/rust-lang/hashbrown)'s [`RawTable`](https://docs.rs/hashbrown/latest/hashbrown/raw/struct.RawTable.html)) to support multiple multiple entries with the same key.
+This is an adaptation of Rust's standard `HashMap` (using [hashbrown](https://github.com/rust-lang/hashbrown)'s [`RawTable`](https://docs.rs/hashbrown/latest/hashbrown/raw/struct.RawTable.html)) to support multiple entries with the same key.
 While a common approach is to use `HashMap<K, Vec<V>>` to store the entries associated to a key in a `Vec`, `MashMap` keeps a flat layout and stores all entries in the same table using probing to select the slots.
 This approach avoids the memory indirection caused by vector pointers, and reduces the memory overhead since it avoids storing the pointer + length + capacity of a vector for each key.
 
