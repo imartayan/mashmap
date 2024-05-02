@@ -8,7 +8,7 @@ exclude = [".github/**", ".gitignore"]
 repository = "https://github.com/imartayan/mashmap"
 documentation = "https://docs.rs/mashmap"
 license = "MIT"
-keywords = ["hashmap", "multimap", "flat", "swisstable"]
+keywords = ["hashmap", "multimap", "flat"]
 categories = ["data-structures"]
 edition = "2021"
 
