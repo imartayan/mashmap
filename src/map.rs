@@ -370,7 +370,7 @@ mod tests {
         }
 
         // collect the values associated with keys `1` and `2`
-        // note that the order might be different the insertion order
+        // note that the order may differ from the insertion order
         let mut values_1: Vec<_> = map.get_iter(&1).copied().collect();
         let mut values_2: Vec<_> = map.get_iter(&2).copied().collect();
         values_1.sort_unstable();

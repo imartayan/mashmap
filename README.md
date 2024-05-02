@@ -20,12 +20,12 @@ map.insert(2, 21);
 
 // iterate over mutable values associated with key `1`
 // and increment them
-for v in map.get_iter_mut(&1) {
+for v in map.get_mut_iter(&1) {
     *v += 1;
 }
 
 // collect the values associated with keys `1` and `2`
-// note that the order might be different the insertion order
+// note that the order may differ from the insertion order
 let mut values_1: Vec<_> = map.get_iter(&1).copied().collect();
 let mut values_2: Vec<_> = map.get_iter(&2).copied().collect();
 values_1.sort_unstable();
