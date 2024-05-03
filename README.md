@@ -1,5 +1,8 @@
 # MashMap
 
+[![crates.io](https://img.shields.io/crates/v/mashmap)](https://crates.io/crates/mashmap)
+[![docs](https://img.shields.io/docsrs/mashmap)](https://docs.rs/mashmap)
+
 A flat HashMap that supports multiple entries per key.
 
 This is an adaptation of Rust's standard `HashMap` (using [hashbrown](https://github.com/rust-lang/hashbrown)'s [`RawTable`](https://docs.rs/hashbrown/latest/hashbrown/raw/struct.RawTable.html)) to support multiple entries with the same key.
