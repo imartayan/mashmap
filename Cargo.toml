@@ -6,6 +6,7 @@ description = "A flat HashMap that supports multiple entries per key"
 readme = "README.md"
 exclude = [".github/**", ".gitignore"]
 repository = "https://github.com/imartayan/mashmap"
+homepage = "https://crates.io/crates/mashmap"
 documentation = "https://docs.rs/mashmap"
 license = "MIT"
 keywords = ["hashmap", "multimap", "flat"]
