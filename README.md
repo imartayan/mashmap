@@ -11,7 +11,7 @@ This approach avoids the memory indirection caused by vector pointers, and reduc
 
 ## Example usage
 
-```rs
+```rust
 use mashmap::MashMap;
 
 let mut map = MashMap::<usize, usize>::new();
@@ -22,8 +22,8 @@ map.insert(2, 20);
 map.insert(2, 21);
 
 // iterate over the values with key `1` with mutable references and increment them
-for v in map.get_mut_iter(&1) {
-    *v += 1;
+for val in map.get_mut_iter(&1) {
+    *val += 1;
 }
 
 // collect the values with keys `1` and `2`
