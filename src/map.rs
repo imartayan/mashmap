@@ -241,6 +241,16 @@ where
         }
     }
 
+    #[inline]
+    fn entry_iter_buckets(&self, key: K) -> impl Iterator<Item = Bucket<(K, V)>> + '_ {
+        let hash = make_hash(&self.hash_builder, &key);
+        unsafe {
+            self.table
+                .iter_hash(hash)
+                .filter(move |bucket| likely(&bucket.as_ref().0 == &key))
+        }
+    }
+
     /// An iterator visiting all values with the given key.
     #[inline]
     pub fn get_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &V> + 'a
@@ -252,6 +262,12 @@ where
             .map(|bucket| unsafe { &bucket.as_ref().1 })
     }
 
+    /// Consumes the key and returns an iterator visiting all values with the given key.
+    #[inline]
+    pub fn entry_iter(&self, key: K) -> impl Iterator<Item = &V> + '_ {
+        self.entry_iter_buckets(key).map(|bucket| unsafe { &bucket.as_ref().1 })
+    }
+
     /// An iterator visiting all values with the given key, with mutable references to the values.
     #[inline]
     pub fn get_mut_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &mut V> + 'a
@@ -261,6 +277,13 @@ where
     {
         self.get_iter_buckets(key)
             .map(|bucket| unsafe { &mut bucket.as_mut().1 })
+    }
+
+    /// Consumes the key and returns an iterator visiting all values with the given key,
+    /// with mutable references to the values.
+    #[inline]
+    pub fn entry_mut_iter(&self, key: K) -> impl Iterator<Item = &V> + '_ {
+        self.entry_iter_buckets(key).map(|bucket| unsafe { &bucket.as_mut().1 })
     }
 
     /// Returns `true` if the map contains at least a single value for the specified key.
