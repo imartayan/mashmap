@@ -3,7 +3,6 @@ use core::borrow::Borrow;
 use core::hash::{BuildHasher, Hash};
 use hashbrown::raw::{Bucket, RawIter, RawIterHash, RawTable};
 use hashbrown::TryReserveError;
-use std::ops::Deref;
 
 #[cfg(not(feature = "nightly"))]
 use core::convert::identity as likely;
