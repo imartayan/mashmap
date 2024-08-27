@@ -1,6 +1,6 @@
 [package]
 name = "mashmap"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Igor Martayan <imartayan@users.noreply.github.com>"]
 description = "A flat HashMap that supports multiple entries per key"
 readme = "README.md"
