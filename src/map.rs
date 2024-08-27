@@ -1,8 +1,9 @@
 use ahash::RandomState;
 use core::borrow::Borrow;
 use core::hash::{BuildHasher, Hash};
-use hashbrown::raw::{Bucket, RawTable};
+use hashbrown::raw::{Bucket, RawIter, RawIterHash, RawTable};
 use hashbrown::TryReserveError;
+use std::ops::Deref;
 
 #[cfg(not(feature = "nightly"))]
 use core::convert::identity as likely;
@@ -200,6 +201,20 @@ where
     K: Eq + Hash,
     S: BuildHasher,
 {
+    /// An iterator visiting all key-value pairs and grouping them by key. The order of the keys is arbitrary.
+    /// This method is slower than [`iter`](#method.iter) but guarantees that entries with the same key are visited consecutively.
+    #[inline]
+    pub fn iter_group_by_key(&self) -> IterGroupByKey<'_, K, V, S> {
+        IterGroupByKey::new(self)
+    }
+
+    /// An iterator visiting all key-value pairs and grouping them by key, with mutable references. The order of the keys is arbitrary.
+    /// This method is slower than [`iter_mut`](#method.iter_mut) but guarantees that entries with the same key are visited consecutively.
+    #[inline]
+    pub fn iter_mut_group_by_key(&mut self) -> IterMutGroupByKey<'_, K, V, S> {
+        IterMutGroupByKey::new(self)
+    }
+
     /// Inserts a key-value pair into the map.
     #[inline]
     pub fn insert(&mut self, key: K, value: V) {
@@ -395,6 +410,102 @@ where
             self.table
                 .insert(hash, (key, value), make_hasher(&self.hash_builder));
         })
+    }
+}
+
+/// An iterator visiting all key-value pairs and grouping them by key.
+pub struct IterGroupByKey<'a, K, V, S> {
+    pub(crate) map: &'a MashMap<K, V, S>,
+    pub(crate) seen: Vec<bool>,
+    pub(crate) main_iter: RawIter<(K, V)>,
+    pub(crate) probe_iter: RawIterHash<(K, V)>,
+}
+
+impl<'a, K, V, S> IterGroupByKey<'a, K, V, S> {
+    /// Creates a new `IterGroupByKey` for the given map.
+    pub fn new(map: &'a MashMap<K, V, S>) -> Self {
+        Self {
+            map,
+            seen: vec![false; map.table.buckets()],
+            main_iter: unsafe { map.table.iter() },
+            probe_iter: unsafe { map.table.iter_hash(0) },
+        }
+    }
+}
+
+impl<'a, K, V, S> Iterator for IterGroupByKey<'a, K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher,
+{
+    type Item = &'a (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut next_bucket = self.probe_iter.next();
+        while next_bucket.is_none() {
+            let mut bucket = self.main_iter.next()?;
+            let mut index = unsafe { self.map.table.bucket_index(&bucket) };
+            while self.seen[index] {
+                bucket = self.main_iter.next()?;
+                index = unsafe { self.map.table.bucket_index(&bucket) };
+            }
+            let key = unsafe { &bucket.as_ref().0 };
+            let hash = make_hash(self.map.hasher(), key);
+            self.probe_iter = unsafe { self.map.table.iter_hash(hash) };
+            next_bucket = self.probe_iter.next();
+        }
+        let bucket = unsafe { next_bucket.unwrap_unchecked() };
+        let index = unsafe { self.map.table.bucket_index(&bucket) };
+        self.seen[index] = true;
+        Some(unsafe { bucket.as_ref() })
+    }
+}
+
+/// An iterator visiting all key-value pairs and grouping them by key, with mutable references.
+pub struct IterMutGroupByKey<'a, K, V, S> {
+    pub(crate) map: &'a MashMap<K, V, S>,
+    pub(crate) seen: Vec<bool>,
+    pub(crate) main_iter: RawIter<(K, V)>,
+    pub(crate) probe_iter: RawIterHash<(K, V)>,
+}
+
+impl<'a, K, V, S> IterMutGroupByKey<'a, K, V, S> {
+    /// Creates a new `IterMutGroupByKey` for the given map.
+    pub fn new(map: &'a mut MashMap<K, V, S>) -> Self {
+        Self {
+            map,
+            seen: vec![false; map.table.buckets()],
+            main_iter: unsafe { map.table.iter() },
+            probe_iter: unsafe { map.table.iter_hash(0) },
+        }
+    }
+}
+
+impl<'a, K, V, S> Iterator for IterMutGroupByKey<'a, K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher,
+{
+    type Item = &'a mut (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut next_bucket = self.probe_iter.next();
+        while next_bucket.is_none() {
+            let mut bucket = self.main_iter.next()?;
+            let mut index = unsafe { self.map.table.bucket_index(&bucket) };
+            while self.seen[index] {
+                bucket = self.main_iter.next()?;
+                index = unsafe { self.map.table.bucket_index(&bucket) };
+            }
+            let key = unsafe { &bucket.as_ref().0 };
+            let hash = make_hash(self.map.hasher(), key);
+            self.probe_iter = unsafe { self.map.table.iter_hash(hash) };
+            next_bucket = self.probe_iter.next();
+        }
+        let bucket = unsafe { next_bucket.unwrap_unchecked() };
+        let index = unsafe { self.map.table.bucket_index(&bucket) };
+        self.seen[index] = true;
+        Some(unsafe { bucket.as_mut() })
     }
 }
 
