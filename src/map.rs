@@ -1,8 +1,8 @@
 use ahash::RandomState;
+use core::borrow::Borrow;
+use core::hash::{BuildHasher, Hash};
 use hashbrown::raw::{Bucket, RawTable};
 use hashbrown::TryReserveError;
-use std::borrow::Borrow;
-use std::hash::{BuildHasher, Hash};
 
 #[cfg(not(feature = "nightly"))]
 use core::convert::identity as likely;
@@ -10,12 +10,21 @@ use core::convert::identity as likely;
 use core::intrinsics::likely;
 
 #[inline]
-fn equivalent_key<Q, K, V>(k: &Q) -> impl Fn(&(K, V)) -> bool + '_
+fn equivalent_key<Q, K, V>(key: &Q) -> impl Fn(&(K, V)) -> bool + '_
 where
     K: Borrow<Q>,
     Q: ?Sized + Hash + Eq,
 {
-    move |x| k == x.0.borrow()
+    move |kv| key == kv.0.borrow()
+}
+
+#[inline]
+fn bucket_with_key<Q, K, V>(key: &Q) -> impl Fn(&Bucket<(K, V)>) -> bool + '_
+where
+    K: Borrow<Q>,
+    Q: ?Sized + Hash + Eq,
+{
+    move |bucket| likely(unsafe { bucket.as_ref() }.0.borrow() == key)
 }
 
 /// Compute the hash of a value using the given hash builder.
@@ -119,16 +128,16 @@ impl<K, V, S> MashMap<K, V, S> {
         }
     }
 
-    /// Returns the number of elements the map can hold without reallocating.
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.table.capacity()
-    }
-
     /// Returns a reference to the map’s [`BuildHasher`].
     #[inline]
     pub const fn hasher(&self) -> &S {
         &self.hash_builder
+    }
+
+    /// Returns the number of elements the map can hold without reallocating.
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.table.capacity()
     }
 
     /// Returns the number of elements in the map.
@@ -143,16 +152,28 @@ impl<K, V, S> MashMap<K, V, S> {
         self.table.is_empty()
     }
 
-    /// Clears the map, removing all key-value pairs. Keeps the allocated memory for reuse.
+    /// An iterator visiting all key-value pairs in arbitrary order.
     #[inline]
-    pub fn clear(&mut self) {
-        self.table.clear();
+    pub fn iter(&self) -> impl Iterator<Item = &(K, V)> {
+        unsafe { self.table.iter().map(|bucket| bucket.as_ref()) }
+    }
+
+    /// An iterator visiting all key-value pairs in arbitrary order, with mutable references to the values.
+    #[inline]
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut (K, V)> {
+        unsafe { self.table.iter().map(|bucket| bucket.as_mut()) }
     }
 
     /// Clears the map, returning all key-value pairs as an iterator.
     #[inline]
     pub fn drain(&mut self) -> impl Iterator<Item = (K, V)> + '_ {
         self.table.drain()
+    }
+
+    /// Clears the map, removing all key-value pairs. Keeps the allocated memory for reuse.
+    #[inline]
+    pub fn clear(&mut self) {
+        self.table.clear();
     }
 
     /// Retains only the elements specified by the predicate.
@@ -172,18 +193,6 @@ impl<K, V, S> MashMap<K, V, S> {
                 })
         }
     }
-
-    /// An iterator visiting all key-value pairs in arbitrary order.
-    #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = &(K, V)> {
-        unsafe { self.table.iter().map(|bucket| bucket.as_ref()) }
-    }
-
-    /// An iterator visiting all key-value pairs in arbitrary order, with mutable references to the values.
-    #[inline]
-    pub fn iter_mut(&self) -> impl Iterator<Item = &mut (K, V)> {
-        unsafe { self.table.iter().map(|bucket| bucket.as_mut()) }
-    }
 }
 
 impl<K, V, S> MashMap<K, V, S>
@@ -191,76 +200,12 @@ where
     K: Eq + Hash,
     S: BuildHasher,
 {
-    /// Reserves capacity for at least additional more elements to be inserted in the `MashMap`.
-    #[inline]
-    pub fn reserve(&mut self, additional: usize) {
-        self.table
-            .reserve(additional, make_hasher(&self.hash_builder));
-    }
-
-    /// Tries to reserve capacity for at least additional more elements to be inserted in the `MashMap`.
-    #[inline]
-    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
-        self.table
-            .try_reserve(additional, make_hasher(&self.hash_builder))
-    }
-
-    /// Shrinks the capacity of the map as much as possible.
-    #[inline]
-    pub fn shrink_to_fit(&mut self) {
-        self.table.shrink_to(0, make_hasher(&self.hash_builder));
-    }
-
-    /// Shrinks the capacity of the map with a lower limit.
-    #[inline]
-    pub fn shrink_to(&mut self, min_capacity: usize) {
-        self.table
-            .shrink_to(min_capacity, make_hasher(&self.hash_builder));
-    }
-
     /// Inserts a key-value pair into the map.
     #[inline]
     pub fn insert(&mut self, key: K, value: V) {
         let hash = make_hash(&self.hash_builder, &key);
         self.table
             .insert(hash, (key, value), make_hasher(&self.hash_builder));
-    }
-
-    /// An iterator visiting all buckets with the given key.
-    #[inline]
-    fn get_iter_buckets<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = Bucket<(K, V)>> + 'a
-    where
-        K: Borrow<Q>,
-        Q: ?Sized + Hash + Eq,
-    {
-        let hash = make_hash(&self.hash_builder, key);
-        unsafe {
-            self.table
-                .iter_hash(hash)
-                .filter(move |bucket| likely(bucket.as_ref().0.borrow() == key))
-        }
-    }
-
-    /// An iterator visiting all values with the given key.
-    #[inline]
-    pub fn get_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &V> + 'a
-    where
-        K: Borrow<Q>,
-        Q: ?Sized + Hash + Eq,
-    {
-        self.get_iter_buckets(key)
-            .map(|bucket| unsafe { &bucket.as_ref().1 })
-    }
-
-    /// An iterator visiting all values with the given key, with mutable references to the values.
-    #[inline]
-    pub fn get_mut_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &mut V> + 'a
-    where
-        K: Borrow<Q>,
-        Q: ?Sized + Hash + Eq,
-    {
-        self.get_iter_buckets(key)
-            .map(|bucket| unsafe { &mut bucket.as_mut().1 })
     }
 
     /// Returns `true` if the map contains at least a single value for the specified key.
@@ -327,21 +272,40 @@ where
             .map(|(_, value)| value)
     }
 
-    /// Removes all values with the given key from the map.
-    pub fn remove_all<Q>(&mut self, key: &Q)
+    /// An iterator visiting all buckets with the given key.
+    #[inline]
+    pub(crate) fn get_iter_buckets<'a, Q>(
+        &'a self,
+        key: &'a Q,
+    ) -> impl Iterator<Item = Bucket<(K, V)>> + 'a
     where
         K: Borrow<Q>,
         Q: ?Sized + Hash + Eq,
     {
         let hash = make_hash(&self.hash_builder, key);
-        unsafe {
-            self.table
-                .iter_hash(hash)
-                .filter(|bucket| likely(bucket.as_ref().0.borrow() == key))
-                .for_each(|bucket| {
-                    self.table.remove(bucket);
-                })
-        }
+        unsafe { self.table.iter_hash(hash).filter(bucket_with_key(key)) }
+    }
+
+    /// An iterator visiting all values with the given key.
+    #[inline]
+    pub fn get_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &V> + 'a
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + Hash + Eq,
+    {
+        self.get_iter_buckets(key)
+            .map(|bucket| unsafe { &bucket.as_ref().1 })
+    }
+
+    /// An iterator visiting all values with the given key, with mutable references to the values.
+    #[inline]
+    pub fn get_mut_iter<'a, Q>(&'a mut self, key: &'a Q) -> impl Iterator<Item = &mut V> + 'a
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + Hash + Eq,
+    {
+        self.get_iter_buckets(key)
+            .map(|bucket| unsafe { &mut bucket.as_mut().1 })
     }
 
     /// Clears the entries with the given key, returning corresponding key-value pairs as an iterator.
@@ -354,9 +318,53 @@ where
         unsafe {
             self.table
                 .iter_hash(hash)
-                .filter(move |bucket| likely(bucket.as_ref().0.borrow() == key))
+                .filter(bucket_with_key(key))
                 .map(|bucket| (self.table.remove(bucket).0).1)
         }
+    }
+
+    /// Removes all values with the given key from the map.
+    pub fn remove_all<Q>(&mut self, key: &Q)
+    where
+        K: Borrow<Q>,
+        Q: ?Sized + Hash + Eq,
+    {
+        let hash = make_hash(&self.hash_builder, key);
+        unsafe {
+            self.table
+                .iter_hash(hash)
+                .filter(bucket_with_key(key))
+                .for_each(|bucket| {
+                    self.table.remove(bucket);
+                })
+        }
+    }
+
+    /// Reserves capacity for at least additional more elements to be inserted in the `MashMap`.
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) {
+        self.table
+            .reserve(additional, make_hasher(&self.hash_builder));
+    }
+
+    /// Tries to reserve capacity for at least additional more elements to be inserted in the `MashMap`.
+    #[inline]
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
+        self.table
+            .try_reserve(additional, make_hasher(&self.hash_builder))
+    }
+
+    /// Shrinks the capacity of the map as much as possible.
+    #[inline]
+    pub fn shrink_to_fit(&mut self) {
+        self.table.shrink_to(0, make_hasher(&self.hash_builder));
+    }
+
+    /// Shrinks the capacity of the map with a lower limit.
+    #[inline]
+    pub fn shrink_to(&mut self, min_capacity: usize) {
+        self.table
+            .shrink_to(min_capacity, make_hasher(&self.hash_builder));
     }
 }
 
