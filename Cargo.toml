@@ -15,4 +15,8 @@ edition = "2021"
 
 [dependencies]
 ahash = "0.8"
-hashbrown = { version = "0.14", features = ["raw"] }
+hashbrown = { version = "0.14.5", features = ["raw"] }
+
+[features]
+default = []
+nightly = []
