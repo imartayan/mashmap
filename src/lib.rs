@@ -2,4 +2,4 @@
 
 mod map;
 
-pub use map::MashMap;
+pub use map::*;
