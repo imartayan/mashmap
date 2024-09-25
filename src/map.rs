@@ -1,6 +1,7 @@
 use ahash::RandomState;
 use core::borrow::Borrow;
 use core::hash::{BuildHasher, Hash};
+use core::mem::{swap, MaybeUninit};
 use hashbrown::raw::{Bucket, RawIter, RawIterHash, RawTable};
 use hashbrown::TryReserveError;
 
@@ -302,7 +303,7 @@ where
 
     /// An iterator visiting all values with the given key.
     #[inline]
-    pub fn get_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &V> + 'a
+    pub fn get_iter<'a, Q>(&'a self, key: &'a Q) -> impl Iterator<Item = &'a V> + 'a
     where
         K: Borrow<Q>,
         Q: ?Sized + Hash + Eq,
@@ -313,7 +314,7 @@ where
 
     /// An iterator visiting all values with the given key, with mutable references to the values.
     #[inline]
-    pub fn get_mut_iter<'a, Q>(&'a mut self, key: &'a Q) -> impl Iterator<Item = &mut V> + 'a
+    pub fn get_mut_iter<'a, Q>(&'a mut self, key: &'a Q) -> impl Iterator<Item = &'a mut V> + 'a
     where
         K: Borrow<Q>,
         Q: ?Sized + Hash + Eq,
@@ -417,7 +418,9 @@ pub struct IterGroupByKey<'a, K, V, S> {
     pub(crate) map: &'a MashMap<K, V, S>,
     pub(crate) seen: Vec<bool>,
     pub(crate) main_iter: RawIter<(K, V)>,
-    pub(crate) probe_iter: RawIterHash<(K, V)>,
+    pub(crate) probe_iter: MaybeUninit<RawIterHash<(K, V)>>,
+    pub(crate) curr_key: MaybeUninit<&'a K>,
+    pub(crate) next_bucket: Option<Bucket<(K, V)>>,
 }
 
 impl<'a, K, V, S> IterGroupByKey<'a, K, V, S> {
@@ -427,7 +430,9 @@ impl<'a, K, V, S> IterGroupByKey<'a, K, V, S> {
             map,
             seen: vec![false; map.table.buckets()],
             main_iter: unsafe { map.table.iter() },
-            probe_iter: unsafe { map.table.iter_hash(0) },
+            probe_iter: MaybeUninit::uninit(),
+            curr_key: MaybeUninit::uninit(),
+            next_bucket: None,
         }
     }
 }
@@ -440,8 +445,7 @@ where
     type Item = &'a (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut next_bucket = self.probe_iter.next();
-        while next_bucket.is_none() {
+        while self.next_bucket.is_none() {
             let mut bucket = self.main_iter.next()?;
             let mut index = unsafe { self.map.table.bucket_index(&bucket) };
             while self.seen[index] {
@@ -450,11 +454,22 @@ where
             }
             let key = unsafe { &bucket.as_ref().0 };
             let hash = make_hash(self.map.hasher(), key);
-            self.probe_iter = unsafe { self.map.table.iter_hash(hash) };
-            next_bucket = self.probe_iter.next();
+            self.curr_key = MaybeUninit::new(key);
+            self.probe_iter = MaybeUninit::new(unsafe { self.map.table.iter_hash(hash) });
+            self.next_bucket = unsafe {
+                self.probe_iter
+                    .assume_init_mut()
+                    .find(|bucket| likely(bucket.as_ref().0.borrow() == key))
+            };
         }
-        let bucket = unsafe { next_bucket.unwrap_unchecked() };
-        let index = unsafe { self.map.table.bucket_index(&bucket) };
+        let mut next_bucket = unsafe {
+            self.probe_iter.assume_init_mut().find(|bucket| {
+                likely(bucket.as_ref().0.borrow() == self.curr_key.assume_init_read())
+            })
+        };
+        swap(&mut next_bucket, &mut self.next_bucket);
+        let bucket = unsafe { next_bucket.as_mut().unwrap_unchecked() };
+        let index = unsafe { self.map.table.bucket_index(bucket) };
         self.seen[index] = true;
         Some(unsafe { bucket.as_ref() })
     }
@@ -465,7 +480,9 @@ pub struct IterMutGroupByKey<'a, K, V, S> {
     pub(crate) map: &'a MashMap<K, V, S>,
     pub(crate) seen: Vec<bool>,
     pub(crate) main_iter: RawIter<(K, V)>,
-    pub(crate) probe_iter: RawIterHash<(K, V)>,
+    pub(crate) probe_iter: MaybeUninit<RawIterHash<(K, V)>>,
+    pub(crate) curr_key: MaybeUninit<&'a K>,
+    pub(crate) next_bucket: Option<Bucket<(K, V)>>,
 }
 
 impl<'a, K, V, S> IterMutGroupByKey<'a, K, V, S> {
@@ -475,7 +492,9 @@ impl<'a, K, V, S> IterMutGroupByKey<'a, K, V, S> {
             map,
             seen: vec![false; map.table.buckets()],
             main_iter: unsafe { map.table.iter() },
-            probe_iter: unsafe { map.table.iter_hash(0) },
+            probe_iter: MaybeUninit::uninit(),
+            curr_key: MaybeUninit::uninit(),
+            next_bucket: None,
         }
     }
 }
@@ -488,8 +507,7 @@ where
     type Item = &'a mut (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut next_bucket = self.probe_iter.next();
-        while next_bucket.is_none() {
+        while self.next_bucket.is_none() {
             let mut bucket = self.main_iter.next()?;
             let mut index = unsafe { self.map.table.bucket_index(&bucket) };
             while self.seen[index] {
@@ -498,11 +516,22 @@ where
             }
             let key = unsafe { &bucket.as_ref().0 };
             let hash = make_hash(self.map.hasher(), key);
-            self.probe_iter = unsafe { self.map.table.iter_hash(hash) };
-            next_bucket = self.probe_iter.next();
+            self.curr_key = MaybeUninit::new(key);
+            self.probe_iter = MaybeUninit::new(unsafe { self.map.table.iter_hash(hash) });
+            self.next_bucket = unsafe {
+                self.probe_iter
+                    .assume_init_mut()
+                    .find(|bucket| likely(bucket.as_ref().0.borrow() == key))
+            };
         }
-        let bucket = unsafe { next_bucket.unwrap_unchecked() };
-        let index = unsafe { self.map.table.bucket_index(&bucket) };
+        let mut next_bucket = unsafe {
+            self.probe_iter.assume_init_mut().find(|bucket| {
+                likely(bucket.as_ref().0.borrow() == self.curr_key.assume_init_read())
+            })
+        };
+        swap(&mut next_bucket, &mut self.next_bucket);
+        let bucket = unsafe { next_bucket.as_mut().unwrap_unchecked() };
+        let index = unsafe { self.map.table.bucket_index(bucket) };
         self.seen[index] = true;
         Some(unsafe { bucket.as_mut() })
     }
