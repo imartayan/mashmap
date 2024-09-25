@@ -540,6 +540,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools;
+    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use std::collections::HashSet;
 
     #[test]
     fn test_map() {
@@ -564,5 +567,49 @@ mod tests {
 
         assert_eq!(values_1, vec![11, 12, 13]);
         assert_eq!(values_2, vec![20, 21]);
+    }
+
+    #[test]
+    fn test_iter_group_by_key() {
+        const N: usize = 100_000;
+        let mut rng = StdRng::seed_from_u64(42);
+
+        let mut map = MashMap::<u16, ()>::new();
+        let mut inserted = HashSet::<u16>::new();
+        for _ in 0..N {
+            let x = rng.gen::<u16>();
+            map.insert(x, ());
+            inserted.insert(x);
+        }
+
+        let mut seen = HashSet::<u16>::new();
+        for (x, _) in map.iter_group_by_key().dedup() {
+            assert!(!seen.contains(x));
+            seen.insert(*x);
+        }
+
+        assert_eq!(inserted, seen);
+    }
+
+    #[test]
+    fn test_iter_mut_group_by_key() {
+        const N: usize = 100_000;
+        let mut rng = StdRng::seed_from_u64(42);
+
+        let mut map = MashMap::<u16, ()>::new();
+        let mut inserted = HashSet::<u16>::new();
+        for _ in 0..N {
+            let x = rng.gen::<u16>();
+            map.insert(x, ());
+            inserted.insert(x);
+        }
+
+        let mut seen = HashSet::<u16>::new();
+        for (x, _) in map.iter_mut_group_by_key().dedup() {
+            assert!(!seen.contains(x));
+            seen.insert(*x);
+        }
+
+        assert_eq!(inserted, seen);
     }
 }

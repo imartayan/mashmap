@@ -1,6 +1,6 @@
 [package]
 name = "mashmap"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Igor Martayan <imartayan@users.noreply.github.com>"]
 description = "A flat HashMap that supports multiple entries per key"
 readme = "README.md"
@@ -16,6 +16,10 @@ edition = "2021"
 [dependencies]
 ahash = "0.8"
 hashbrown = { version = "0.14.5", features = ["raw"] }
+
+[dev-dependencies]
+itertools = "0.13"
+rand = "0.8"
 
 [features]
 default = []
