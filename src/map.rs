@@ -331,12 +331,12 @@ where
         Q: ?Sized + Hash + Eq,
     {
         let hash = make_hash(&self.hash_builder, key);
-        unsafe {
+        ExhaustIter::new(unsafe {
             self.table
                 .iter_hash(hash)
                 .filter(bucket_with_key(key))
                 .map(|bucket| (self.table.remove(bucket).0).1)
-        }
+        })
     }
 
     // Drain the key if the values are selected by the predicate.
@@ -622,7 +622,7 @@ mod tests {
         map.insert(2, 21);
 
         let v: Vec<usize> = map.drain_key_if(&1, |v| *v == 10).collect();
-                            assert_eq!(v, vec![10]);
+        assert_eq!(v, vec![10]);
 
         // collect the values with keys `1` and `2`
         // note that the order may differ from the insertion order
@@ -666,8 +666,14 @@ mod tests {
         map.insert(2, 20);
         map.insert(2, 21);
 
-        assert!(matches!(map.remove_key_if(&1, |v| *v % 2 == 0), Some(10) | Some(12)));
-        assert!(matches!(map.remove_key_if(&1, |v| *v % 2 == 0), Some(10) | Some(12)));
+        assert!(matches!(
+            map.remove_key_if(&1, |v| *v % 2 == 0),
+            Some(10) | Some(12)
+        ));
+        assert!(matches!(
+            map.remove_key_if(&1, |v| *v % 2 == 0),
+            Some(10) | Some(12)
+        ));
         assert_eq!(map.remove_key_if(&1, |v| *v % 2 == 0), None);
 
         // collect the values with keys `1` and `2`
