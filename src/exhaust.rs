@@ -1,4 +1,4 @@
-pub(crate) struct ExhaustIter<I>
+pub struct ExhaustIter<I>
 where
     I: Iterator,
 {
@@ -9,7 +9,7 @@ impl<I> ExhaustIter<I>
 where
     I: Iterator,
 {
-    pub fn new(inner: I) -> Self {
+    pub const fn new(inner: I) -> Self {
         Self { inner }
     }
 }

@@ -1,10 +1,10 @@
+use super::exhaust::ExhaustIter;
 use ahash::RandomState;
 use core::borrow::Borrow;
 use core::hash::{BuildHasher, Hash};
 use core::mem::{swap, MaybeUninit};
 use hashbrown::raw::{Bucket, RawIter, RawIterHash, RawTable};
 use hashbrown::TryReserveError;
-use crate::exhaust::ExhaustIter;
 
 #[cfg(not(feature = "nightly"))]
 use core::convert::identity as likely;
@@ -340,7 +340,11 @@ where
     }
 
     // Drain the key if the values are selected by the predicate.
-    pub fn drain_key_if<'a, Q>(&'a mut self, key: &'a Q, mut predicate: impl FnMut(&'a V) -> bool + 'a) -> impl Iterator<Item = V> + 'a
+    pub fn drain_key_if<'a, Q>(
+        &'a mut self,
+        key: &'a Q,
+        mut predicate: impl FnMut(&'a V) -> bool + 'a,
+    ) -> impl Iterator<Item = V> + 'a
     where
         K: Borrow<Q>,
         Q: ?Sized + Hash + Eq,
@@ -350,12 +354,18 @@ where
             self.table
                 .iter_hash(hash)
                 .filter(bucket_with_key(key))
-                .filter_map(move |bucket| predicate(&bucket.as_ref().1).then(|| (self.table.remove(bucket).0).1))
+                .filter_map(move |bucket| {
+                    predicate(&bucket.as_ref().1).then(|| (self.table.remove(bucket).0).1)
+                })
         })
     }
 
     // Remove value of the key whose value is selected by the predicate.
-    pub fn remove_key_if<'a, Q>(&'a mut self, key: &'a Q, mut predicate: impl FnMut(&'a V) -> bool + 'a) -> Option<V>
+    pub fn remove_key_if<'a, Q>(
+        &'a mut self,
+        key: &'a Q,
+        mut predicate: impl FnMut(&'a V) -> bool + 'a,
+    ) -> Option<V>
     where
         K: Borrow<Q>,
         Q: ?Sized + Hash + Eq,
@@ -365,7 +375,9 @@ where
             self.table
                 .iter_hash(hash)
                 .filter(bucket_with_key(key))
-                .find_map(move |bucket| predicate(&bucket.as_ref().1).then(|| (self.table.remove(bucket).0).1))
+                .find_map(move |bucket| {
+                    predicate(&bucket.as_ref().1).then(|| (self.table.remove(bucket).0).1)
+                })
         }
     }
 
