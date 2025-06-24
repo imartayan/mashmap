@@ -339,7 +339,7 @@ where
         })
     }
 
-    // Drain the key if the values are selected by the predicate.
+    // Drains the entries with the given key whose value is selected by the predicate.
     pub fn drain_key_if<'a, Q>(
         &'a mut self,
         key: &'a Q,
@@ -360,7 +360,7 @@ where
         })
     }
 
-    // Remove value of the key whose value is selected by the predicate.
+    // Removes the entries with the given key whose value is selected by the predicate.
     pub fn remove_key_if<'a, Q>(
         &'a mut self,
         key: &'a Q,

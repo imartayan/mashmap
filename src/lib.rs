@@ -1,5 +1,37 @@
 #![cfg_attr(feature = "nightly", feature(core_intrinsics))]
 
+//! A flat HashMap that supports multiple entries per key.
+//!
+//! This is an adaptation of Rust's standard `HashMap` (using [hashbrown](https://github.com/rust-lang/hashbrown)'s [`RawTable`](https://docs.rs/hashbrown/0.14.5/hashbrown/raw/struct.RawTable.html)) to support multiple entries with the same key.
+//! While a common approach is to use a `HashMap<K, Vec<V>>` to store the entries corresponding to a key in a `Vec`, [`MashMap`] keeps a flat layout and stores all entries in the same table using probing to select the slots.
+//! This approach avoids the memory indirection caused by vector pointers, and reduces memory overhead since it avoids storing the pointer + length + capacity of a vector for each key.
+//!
+//! ```rust
+//! use mashmap::MashMap;
+//!
+//! let mut map = MashMap::<usize, usize>::new();
+//! map.insert(1, 10);
+//! map.insert(1, 11);
+//! map.insert(1, 12);
+//! map.insert(2, 20);
+//! map.insert(2, 21);
+//!
+//! // iterate over the values with key `1` with mutable references and increment them
+//! for val in map.get_mut_iter(&1) {
+//!     *val += 1;
+//! }
+//!
+//! // collect the values with keys `1` and `2`
+//! // note that the order may differ from the insertion order
+//! let mut values_1: Vec<_> = map.get_iter(&1).copied().collect();
+//! let mut values_2: Vec<_> = map.get_iter(&2).copied().collect();
+//! values_1.sort_unstable();
+//! values_2.sort_unstable();
+//!
+//! assert_eq!(values_1, vec![11, 12, 13]);
+//! assert_eq!(values_2, vec![20, 21]);
+//! ```
+
 pub(crate) mod exhaust;
 mod map;
 
