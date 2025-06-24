@@ -695,7 +695,7 @@ mod tests {
         let mut map = MashMap::<u16, ()>::new();
         let mut inserted = HashSet::<u16>::new();
         for _ in 0..N {
-            let x = rng.gen::<u16>();
+            let x = rng.random::<u16>();
             map.insert(x, ());
             inserted.insert(x);
         }
@@ -717,7 +717,7 @@ mod tests {
         let mut map = MashMap::<u16, ()>::new();
         let mut inserted = HashSet::<u16>::new();
         for _ in 0..N {
-            let x = rng.gen::<u16>();
+            let x = rng.random::<u16>();
             map.insert(x, ());
             inserted.insert(x);
         }
